@@ -9,70 +9,220 @@ In the following assignment you will be looking at data from an one level of an 
 
 #Upload data
 ```{r}
-
+DF1 <- as.data.frame(online_data)
 ```
 
 #Visualization 
 ```{r}
+library(reshape2)
+library(plotly)
 #Start by creating histograms of the distributions for all variables (#HINT: look up "facet" in the ggplot documentation)
 
 #Then visualize the relationships between variables
 
 #Try to capture an intution about the data and the relationships
+#We want to create more than one histogram, hence the need for facet (right?), so we need to choose the most important factors for our histogram. Keeping the end in mind, what determines a student leveling up is their score on the post.test, so let's use these two variables.
 
+hp <- ggplot(DF1, aes(x=post.test.score)) + geom_histogram(binwidth=.01,color="red")
+hp + facet_grid(level.up ~ .)
+#This information isn't helpful because it has students that did well on the post test as not leveling up. So we look at different variables, let's look at average assignmnet score.
+
+#The average assignment score correlates better to the students moving up. Although there is some overlap?
+
+hp <- ggplot(DF1, aes(x=av.assignment.score)) + geom_histogram(binwidth=.01,color="blue")
+hp + facet_grid(level.up ~ .)
+
+#Just for kicks, let's look at forum posts and how they relate to leveling up.
+hp <- ggplot(DF1, aes(x=forum.posts)) + geom_histogram(binwidth=1,color="white")
+hp + facet_grid(level.up ~ .)
+
+#and then let's see how messages relate to leveling up.
+hp <- ggplot(DF1, aes(x=messages)) + geom_histogram(binwidth=2,color="green")
+hp + facet_grid(level.up ~ .)
 ```
+
 #Classification tree
 ```{r}
 #Create a classification tree that predicts whether a student "levels up" in the online course using three variables of your choice (As we did last time, set all controls to their minimums)
 
-#Plot and generate a CP table for your tree 
+library(rpart)
 
+c.tree1 <- rpart(level.up ~ av.assignment.score + post.test.score + messages, control = rpart.control(minsplit = 15 ,cp=0.001), method ="class", data = DF1)
+
+
+
+#Plot and generate a CP table for your tree 
+printcp(c.tree1)
+
+```
+
+#Plot tree
+```{r}
+post(c.tree1, file = "tree1.ps", title = "Students Leveling Up")
+
+```
+```{r}
 #Generate a probability value that represents the probability that a student levels up based your classification tree 
 
-D1$pred <- predict(rp, type = "prob")[,2]#Last class we used type = "class" which predicted the classification for us, this time we are using type = "prob" to see the probability that our classififcation is based on.
+DF1$pred <- predict(c.tree1, type = "prob")[,2]
+
+#Last class we used type = "class" which predicted the classification for us, this time we are using type = "prob" to see the probability that our classififcation is based on.
 
 #Now you can generate the ROC curve for your model. You will need to install the package ROCR to do this.
 
+install.packages(ROCR)
 library(ROCR)
 
 #Plot the curve
-pred.detail <- prediction(D1$pred, D1$level.up) 
+pred.detail <- prediction(DF1$pred, DF1$level.up) 
 plot(performance(pred.detail, "tpr", "fpr"))
 abline(0, 1, lty = 2)
 
 #Calculate the Area Under the Curve
-unlist(slot(performance(Pred2,"auc"), "y.values"))#Unlist liberates the AUC value from the "performance" object created by ROCR
+unlist(slot(performance(pred.detail,"auc"), "y.values"))
 
-#Now repeat this process, but using the variables you did not use for the previous model and compare the plots & results of your two models. Which one do you think was the better model? Why?
+#Unlist liberates the AUC value from the "performance" object created by ROCR
 
 ```
+```{r}
+#Now repeat this process, but using the variables you did not use for the previous model and compare the plots & results of your two models. Which one do you think was the better model? Why?
+
+#The better model is the first one (c.tree1), it has an AUC of 1, so all of the data points are covered in this model. 
+
+c.tree2 <- rpart(level.up ~ pre.test.score + forum.posts, control = rpart.control(minsplit = 25, cp=0.001),method="class", data = DF1)
+
+printcp(c.tree2)
+
+#Generate a probability value that represents the probability that a student levels up based your classification tree 
+
+DF1$pred <- predict(c.tree2, type = "prob")[,2]
+
+#Plot the curve
+pred.detail <- prediction(DF1$pred, DF1$level.up) 
+plot(performance(pred.detail, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+
+#Calculate the Area Under the Curve
+unlist(slot(performance(pred.detail,"auc"), "y.values"))
+
+printcp(c.tree2)
+post(c.tree2, file = "tree2.ps", title = "Students Leveling Up")
+
+```
+```{r}
+#Trying another one with a higher minsplit, just to see the difference.
+
+c.tree3 <- rpart(level.up ~ pre.test.score + forum.posts, control = rpart.control(minsplit =50, cp=0.007500),method="class", data = DF1)
+
+printcp(c.tree3)
+
+#Generate a probability value that represents the probability that a student levels up based your classification tree 
+
+DF1$pred <- predict(c.tree3, type = "prob")[,2]
+
+#Plot the curve
+pred.detail <- prediction(DF1$pred, DF1$level.up) 
+plot(performance(pred.detail, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+
+#Calculate the Area Under the Curve
+unlist(slot(performance(pred.detail,"auc"), "y.values"))
+
+printcp(c.tree3)
+post(c.tree3, file = "tree3.ps", title = "Students Leveling Up")
+
+```
+
 #Thresholds
 ```{r}
 #Look at the ROC plot for your first model. Based on this plot choose a probability threshold that balances capturing the most correct predictions against false positives. Then generate a new variable in your data set that classifies each student according to your chosen threshold.
 
-threshold.pred1 <- 
+threshold.pred1 <- ifelse(DF1$pred >=.65, 1,0)
+DF1$threshold <-threshold.pred1
+DF1$level.up2<- ifelse(DF1$level.up =="yes",1,0)
 
 #Now generate three diagnostics:
 
-D1$accuracy.model1 <-
+#predicted yes/total yes
+true.pos <- sum(DF1$threshold)/sum(DF1$level.up2)
 
-D1$precision.model1 <- 
+no <- 1000-sum(DF1$threshold)
+no1 <- 1000-sum(DF1$level.up2)
 
-D1$recall.model1 <- 
+true.neg <- no/no1
+false.pos <- no/sum(DF1$level.up2)
+false.neg <- sum(DF1$threshold)/no1
+
+DF1$accuracy.model1 <- (true.pos+true.neg)/1000
+
+
+DF1$precision.model1 <- true.pos/(true.pos+false.pos)
+
+DF1$recall.model1 <- true.pos/(true.pos+false.neg)
 
 #Finally, calculate Kappa for your model according to:
 
 #First generate the table of comparisons
-table1 <- table(D1$level.up, D1$threshold.pred1)
+table1 <- table(DF1$level.up, DF1$threshold)
 
 #Convert to matrix
 matrix1 <- as.matrix(table1)
 
 #Calculate kappa
-kappa(matrix1, exact = TRUE)/kappa(matrix1)
+cohen.kappa(matrix1)
+```
+#Now choose a different threshold value and repeat these diagnostics. What conclusions can you draw about your two thresholds? 
 
-#Now choose a different threshold value and repeat these diagnostics. What conclusions can you draw about your two thresholds?
+In the first one, I set the threshold to move up to be >=65% and in the second, 45%, I found that the Kappa probability for the first and second thresholds, respectively were 52% and 55%:
+Cohen Kappa and Weighted Kappa correlation coefficients and confidence boundaries 
+                 lower estimate upper
+unweighted kappa  0.47     0.52  0.58
+weighted kappa    0.47     0.52  0.58
 
+and
+
+Cohen Kappa and Weighted Kappa correlation coefficients and confidence boundaries 
+                 lower estimate upper
+unweighted kappa  0.51     0.56  0.61
+weighted kappa    0.51     0.56  0.61
+
+So I think that this shows that after a certain threshold level, the kappa remains relatively in the same ballpark. 
+
+
+```{r}
+DF2 <- DF1
+threshold.pred2 <- ifelse(DF2$pred >=.45, 1,0)
+DF2$threshold <-threshold.pred2
+
+#Now generate three diagnostics:
+
+#predicted yes/total yes
+true.pos2 <- sum(DF2$threshold)/sum(DF2$level.up2)
+
+no2 <- 1000-sum(DF2$threshold)
+no3 <- 1000-sum(DF2$level.up2)
+
+true.neg2 <- no2/no3
+false.pos2 <- no2/sum(DF2$level.up2)
+false.neg2 <- sum(DF2$threshold)/no2
+
+DF2$accuracy.model2 <- (true.pos2+true.neg2)/1000
+
+
+DF2$precision.model2 <- true.pos2/(true.pos2+false.pos2)
+
+DF2$recall.model2 <- true.pos2/(true.pos2+false.neg2)
+
+#Finally, calculate Kappa for your model according to:
+
+#First generate the table of comparisons
+table2 <- table(DF2$level.up, DF2$threshold)
+
+#Convert to matrix
+matrix2 <- as.matrix(table2)
+
+#Calculate kappa
+cohen.kappa(matrix2)
 ```
 
 
